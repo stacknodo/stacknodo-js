@@ -1,11 +1,11 @@
 {
   "name": "@stacknodo/sdk",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Official Stacknodo JavaScript SDK",
   "type": "module",
   "main": "./src/index.js",
   "bin": {
-    "stacknodo": "./src/cli.js"
+    "stacknodo": "src/cli.js"
   },
   "scripts": {
     "postinstall": "node ./src/postinstall.js",
