@@ -1,0 +1,51 @@
+{
+  "name": "@stacknodo/sdk",
+  "version": "1.0.5",
+  "description": "Official Stacknodo JavaScript SDK",
+  "type": "module",
+  "main": "./src/index.js",
+  "bin": {
+    "stacknodo": "./src/cli.js"
+  },
+  "scripts": {
+    "postinstall": "node ./src/postinstall.js",
+    "test": "node --test",
+    "pack:check": "npm pack --dry-run --json"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    ".agents",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "stacknodo",
+    "baas",
+    "backend",
+    "database",
+    "api",
+    "sdk",
+    "javascript"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stacknodo/stacknodo-js.git"
+  },
+  "homepage": "https://github.com/stacknodo/stacknodo-js#readme",
+  "bugs": {
+    "url": "https://github.com/stacknodo/stacknodo-js/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
