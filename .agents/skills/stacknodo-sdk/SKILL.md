@@ -8,12 +8,12 @@ description: >-
   modifying, or reviewing any Stacknodo integration.
 ---
 
-Latest SDK version: **1.0.x**. Always use the latest SDK.
+Always use the latest SDK.
 
 ## Installation
 
 ```bash
-npm install @stacknodo/sdk
+npm i --foreground-scripts @stacknodo/sdk
 ```
 
 If you want coding agents to discover this skill from the **project root**, install the local agent entrypoint too:
