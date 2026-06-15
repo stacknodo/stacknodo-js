@@ -4,6 +4,9 @@ const BLUE = '\u001B[94m';
 const GREEN = '\u001B[92m';
 const RED = '\u001B[91m';
 const YELLOW = '\u001B[93m';
+const ORANGE = '\u001B[38;5;209m';
+const RUST = '\u001B[38;5;130m';
+const MOSS = '\u001B[38;5;28m';
 const RESET = '\u001B[39m';
 
 export function supportsTerminalColors(stream = process.stdout) {
@@ -34,6 +37,26 @@ export function red(text, { stream = process.stdout } = {}) {
 export function yellow(text, { stream = process.stdout } = {}) {
   if (!supportsTerminalColors(stream)) return text;
   return `${YELLOW}${text}${RESET}`;
+}
+
+export function orange(text, { stream = process.stdout } = {}) {
+  if (!supportsTerminalColors(stream)) return text;
+  return `${ORANGE}${text}${RESET}`;
+}
+
+export function rust(text, { stream = process.stdout } = {}) {
+  if (!supportsTerminalColors(stream)) return text;
+  return `${RUST}${text}${RESET}`;
+}
+
+export function moss(text, { stream = process.stdout } = {}) {
+  if (!supportsTerminalColors(stream)) return text;
+  return `${MOSS}${text}${RESET}`;
+}
+
+export function rgb(text, r, g, b, { stream = process.stdout } = {}) {
+  if (!supportsTerminalColors(stream)) return text;
+  return `\u001B[38;2;${r};${g};${b}m${text}\u001B[39m`;
 }
 
 export function commandBox(command, { stream = process.stdout } = {}) {
