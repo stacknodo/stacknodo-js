@@ -164,6 +164,27 @@ test('AdminClient schema helpers merge and remove fields by table name', async (
   );
 });
 
+test('AdminClient exposes schema export but not data backup downloads', async () => {
+  const http = createHttpStub({
+    dbId: 'db_admin',
+    getImpl: async (path) => ({ data: { path, tables: [], relations: [] } }),
+  });
+
+  const admin = new AdminClient(http);
+  const schema = await admin.schema.export();
+
+  assert.deepEqual(schema, {
+    path: '/platform/databases/db_admin/schema',
+    tables: [],
+    relations: [],
+  });
+
+  // For security, full data backups must not be reachable through the SDK.
+  assert.equal(typeof admin.snapshots.download, 'undefined');
+  assert.equal(typeof admin.snapshots.delete, 'undefined');
+  assert.equal(typeof admin.schema.exportData, 'undefined');
+});
+
 test('RealtimeClient dispatches matching events and unsubscribes cleanly', () => {
   const sent = [];
   const events = [];

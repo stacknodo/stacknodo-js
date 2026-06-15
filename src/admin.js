@@ -57,6 +57,21 @@ class SchemaAdmin {
     const result = await this._http.post(`/platform/databases/${dbId}/promote`);
     return result?.data ?? result;
   }
+
+  /**
+   * Export the portable, secret-free database schema (tables, fields, relations,
+   * allowedIPs). Contains no row data and no secrets such as jwtSecret or
+   * superuserToken.
+   *
+   * For security, the SDK only exposes schema export. Full data backups
+   * (the `/export` zip bundle and snapshot downloads) are intentionally NOT
+   * downloadable through the SDK — use the Stacknodo dashboard for those.
+   */
+  async export() {
+    const dbId = await this._http.resolveDbId();
+    const result = await this._http.get(`/platform/databases/${dbId}/schema`);
+    return result?.data ?? result;
+  }
 }
 
 class SnapshotsAdmin {
@@ -79,7 +94,9 @@ class SnapshotsAdmin {
     const result = await this._http.post(`/platform/databases/${dbId}/snapshots/${snapshotId}/restore`);
     return result?.data ?? result;
   }
-  // No delete — snapshot deletion is intentionally forbidden via the SDK.
+  // For security, snapshots can be created, listed, and restored, but NOT
+  // downloaded or deleted via the SDK. Downloading a snapshot would expose a
+  // full data backup, so it is intentionally omitted — use the dashboard.
 }
 
 class ProjectsAdmin {
