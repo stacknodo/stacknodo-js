@@ -2,7 +2,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { blue, commandBox, green, red, terminalLink, yellow } from './terminal-links.js';
+import { commandBox, green, rgb, terminalLink } from './terminal-links.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,27 +16,145 @@ const sdkDocsLink = terminalLink('Open SDK docs ↗', sdkDocsUrl, { fallback: sd
 const agentDocsLink = terminalLink('AI Coding Agent guide ↗', agentDocsUrl, { fallback: agentDocsUrl });
 const agentInstallCommandBox = commandBox(agentInstallCommand);
 
+// "ANSI Shadow" figlet style glyphs. Solid blocks (█) form the letter face;
+// the box-drawing characters (╗ ╝ ╔ ╚ ═ ║) form the built-in 3D shadow.
 const BLOCK_FONT = {
-  A: [' ███ ', '█   █', '█████', '█   █', '█   █'],
-  C: [' ████', '█    ', '█    ', '█    ', ' ████'],
-  D: ['████ ', '█   █', '█   █', '█   █', '████ '],
-  K: ['█   █', '█  █ ', '███  ', '█  █ ', '█   █'],
-  N: ['█   █', '██  █', '█ █ █', '█  ██', '█   █'],
-  O: [' ███ ', '█   █', '█   █', '█   █', ' ███ '],
-  S: ['█████', '█    ', '████ ', '    █', '█████'],
-  T: ['█████', '  █  ', '  █  ', '  █  ', '  █  '],
+  A: [
+    ' █████╗ ',
+    '██╔══██╗',
+    '███████║',
+    '██╔══██║',
+    '██║  ██║',
+    '╚═╝  ╚═╝',
+  ],
+  C: [
+    ' ██████╗',
+    '██╔════╝',
+    '██║     ',
+    '██║     ',
+    '╚██████╗',
+    ' ╚═════╝',
+  ],
+  D: [
+    '██████╗ ',
+    '██╔══██╗',
+    '██║  ██║',
+    '██║  ██║',
+    '██████╔╝',
+    '╚═════╝ ',
+  ],
+  K: [
+    '██╗  ██╗',
+    '██║ ██╔╝',
+    '█████╔╝ ',
+    '██╔═██╗ ',
+    '██║  ██╗',
+    '╚═╝  ╚═╝',
+  ],
+  N: [
+    '███╗   ██╗',
+    '████╗  ██║',
+    '██╔██╗ ██║',
+    '██║╚██╗██║',
+    '██║ ╚████║',
+    '╚═╝  ╚═══╝',
+  ],
+  O: [
+    ' ██████╗ ',
+    '██╔═══██╗',
+    '██║   ██║',
+    '██║   ██║',
+    '╚██████╔╝',
+    ' ╚═════╝ ',
+  ],
+  S: [
+    '███████╗',
+    '██╔════╝',
+    '███████╗',
+    '╚════██║',
+    '███████║',
+    '╚══════╝',
+  ],
+  T: [
+    '████████╗',
+    '╚══██╔══╝',
+    '   ██║   ',
+    '   ██║   ',
+    '   ██║   ',
+    '   ╚═╝   ',
+  ],
 };
 
-function renderBlockWord(word) {
-  const rows = Array.from({ length: 5 }, () => []);
+const GLYPH_HEIGHT = 6;
+const SHADOW_CHARS = new Set(['╗', '╝', '╔', '╚', '═', '║']);
 
-  for (const char of word.toUpperCase()) {
+/**
+ * Render a word in the ANSI Shadow style. Returns an array of plain row
+ * strings (no ANSI codes). Coloring is applied later, once we know each row's
+ * position in the whole graphic, so the diagonal shine can sweep across both
+ * words continuously.
+ */
+function renderBlockWord(word) {
+  const rows = Array.from({ length: GLYPH_HEIGHT }, () => '');
+
+  word.toUpperCase().split('').forEach((char, charIndex) => {
     const glyph = BLOCK_FONT[char];
     if (!glyph) throw new Error(`Missing block font glyph for ${char}`);
-    glyph.forEach((segment, index) => rows[index].push(segment));
+
+    const glyphWidth = Math.max(...glyph.map((line) => [...line].length));
+    glyph.forEach((segment, rowIndex) => {
+      if (charIndex > 0) rows[rowIndex] += ' ';
+      rows[rowIndex] += segment.padEnd(glyphWidth, ' ');
+    });
+  });
+
+  return rows;
+}
+
+// Green palette (24-bit). Base = original Stacknodo brand emerald, shine = the
+// lighter highlight that the diagonal light band fades toward.
+const FACE_BASE = [16, 185, 129];
+const FACE_SHINE = [180, 255, 214];
+const SHADOW_BASE = [8, 92, 64];
+const SHADOW_SHINE = [60, 170, 120];
+
+const SHINE_SLOPE = -3;      // columns the band center shifts per row (negative = opposite diagonal)
+const SHINE_HALF_WIDTH = 10; // half-thickness of the light band
+
+function lerp(a, b, t) {
+  return Math.round(a + (b - a) * t);
+}
+
+function mix(base, shine, t) {
+  return [lerp(base[0], shine[0], t), lerp(base[1], shine[1], t), lerp(base[2], shine[2], t)];
+}
+
+/**
+ * Colorize one art line. `col` is the absolute column within the centered art
+ * block; `globalRow` is the row index across the whole graphic. The diagonal
+ * shine peaks where the column sits on the moving band center.
+ */
+function colorizeArtLine(plain, globalRow, totalRows, innerWidth) {
+  const bandCenter = innerWidth / 2 + (globalRow - (totalRows - 1) / 2) * SHINE_SLOPE;
+  let out = '';
+
+  for (let col = 0; col < plain.length; col += 1) {
+    const char = plain[col];
+    if (char !== '█' && !SHADOW_CHARS.has(char)) {
+      out += char;
+      continue;
+    }
+
+    const distance = Math.abs(col - bandCenter);
+    const t = Math.max(0, 1 - distance / SHINE_HALF_WIDTH);
+    const eased = t * t * (3 - 2 * t); // smoothstep for a soft glow
+    const [r, g, b] = char === '█'
+      ? mix(FACE_BASE, FACE_SHINE, eased)
+      : mix(SHADOW_BASE, SHADOW_SHINE, eased);
+    out += rgb(char, r, g, b);
   }
 
-  return rows.map((row) => row.join('  '));
+  return out;
 }
 
 function centerText(text, width) {
@@ -51,8 +169,20 @@ function renderWindowLine(text, width, colorize) {
   return `│ ${colorize ? colorize(centered) : centered} │`;
 }
 
+/**
+ * Pad+center a plain art row to `width`, then colorize it with the diagonal
+ * shine using its absolute column positions.
+ */
+function renderArtLine(plain, globalRow, totalRows, width) {
+  const totalPadding = Math.max(0, width - plain.length);
+  const leftPadding = Math.floor(totalPadding / 2);
+  const rightPadding = totalPadding - leftPadding;
+  const padded = `${' '.repeat(leftPadding)}${plain}${' '.repeat(rightPadding)}`;
+  return `│ ${colorizeArtLine(padded, globalRow, totalRows, width)} │`;
+}
+
 function renderPostinstallGraphic() {
-  const titleText = '● ● ●  Welcome to Stacknodo SDK';
+  const titleText = '⟡  Welcome to Stacknodo SDK';
   const stackLines = renderBlockWord('STACK');
   const nodoLines = renderBlockWord('NODO');
   const footerText = 'Ship data, files, auth, and AI from one SDK.';
@@ -64,17 +194,24 @@ function renderPostinstallGraphic() {
   );
   const titlePadding = ' '.repeat(innerWidth - titleText.length);
 
+  // One blank row sits between the two words; the shine treats the whole block
+  // (STACK + gap + NODO) as a single continuous canvas.
+  const totalArtRows = stackLines.length + 1 + nodoLines.length;
+  const stackArt = stackLines.map((line, i) => renderArtLine(line, i, totalArtRows, innerWidth));
+  const gapRow = stackLines.length;
+  const nodoArt = nodoLines.map((line, i) => renderArtLine(line, gapRow + 1 + i, totalArtRows, innerWidth));
+
   return [
-    `┌${'─'.repeat(innerWidth + 2)}┐`,
-    `│ ${red('●')} ${yellow('●')} ${green('●')}  Welcome to ${green('Stacknodo SDK')}${titlePadding} │`,
+    `╭${'─'.repeat(innerWidth + 2)}╮`,
+    `│ ${green('⟡')}  Welcome to ${green('Stacknodo SDK')}${titlePadding} │`,
     `├${'─'.repeat(innerWidth + 2)}┤`,
     renderWindowLine('', innerWidth),
-    ...stackLines.map((line) => renderWindowLine(line, innerWidth, green)),
+    ...stackArt,
     renderWindowLine('', innerWidth),
-    ...nodoLines.map((line) => renderWindowLine(line, innerWidth, blue)),
+    ...nodoArt,
     renderWindowLine('', innerWidth),
     renderWindowLine(footerText, innerWidth),
-    `└${'─'.repeat(innerWidth + 2)}┘`,
+    `╰${'─'.repeat(innerWidth + 2)}╯`,
   ].join('\n');
 }
 
