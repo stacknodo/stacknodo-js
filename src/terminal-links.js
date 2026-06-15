@@ -56,7 +56,7 @@ export function moss(text, { stream = process.stdout } = {}) {
 
 export function rgb(text, r, g, b, { stream = process.stdout } = {}) {
   if (!supportsTerminalColors(stream)) return text;
-  return `\u001B[38;2;${r};${g};${b}m${text}\u001B[39m`;
+  return `\u001B[38;2;${r};${g};${b}m${text}${RESET}`;
 }
 
 export function commandBox(command, { stream = process.stdout } = {}) {
