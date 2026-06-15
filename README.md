@@ -1074,15 +1074,8 @@ Simple real-life example: roll back test data after a failed import.
 await client.admin.snapshots.restore('snapshot_123');
 ```
 
-#### `delete(snapshotId)`
-
-Delete a snapshot.
-
-Simple real-life example: clean up an old temporary backup.
-
-```js
-await client.admin.snapshots.delete('snapshot_123');
-```
+There is no `delete(snapshotId)`. Snapshot deletion is intentionally not exposed
+through the SDK; manage snapshot cleanup from the Stacknodo dashboard instead.
 
 ### Projects: `client.admin.projects`
 
@@ -1127,18 +1120,18 @@ await client.admin.projects.update('proj_123', {
 
 #### `list()`
 
-List environments for the current project.
+List the environments that exist for the current project.
 
 Simple real-life example: verify whether staging already exists before a deployment step.
 
 ```js
 const environments = await client.admin.environments.list();
-console.log(environments);
+console.log(environments); // e.g. ['production', 'staging']
 ```
 
 #### `add(environment)`
 
-Add an environment to the current project.
+Add an environment to the current project's database.
 
 Simple real-life example: create a development environment for a new feature team.
 

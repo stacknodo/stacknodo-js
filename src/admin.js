@@ -53,8 +53,8 @@ class SchemaAdmin {
   }
 
   async promote() {
-    const projectId = this._http.projectId;
-    const result = await this._http.post(`/platform/projects/${projectId}/promote`);
+    const dbId = await this._http.resolveDbId();
+    const result = await this._http.post(`/platform/databases/${dbId}/promote`);
     return result?.data ?? result;
   }
 }
@@ -79,11 +79,7 @@ class SnapshotsAdmin {
     const result = await this._http.post(`/platform/databases/${dbId}/snapshots/${snapshotId}/restore`);
     return result?.data ?? result;
   }
-
-  async delete(snapshotId) {
-    const dbId = await this._http.resolveDbId();
-    return this._http.del(`/platform/databases/${dbId}/snapshots/${snapshotId}`);
-  }
+  // No delete — snapshot deletion is intentionally forbidden via the SDK.
 }
 
 class ProjectsAdmin {
@@ -111,13 +107,14 @@ class EnvironmentsAdmin {
 
   async list() {
     const projectId = this._http.projectId;
-    const result = await this._http.get(`/platform/projects/${projectId}/environments`);
-    return result?.data ?? result;
+    const result = await this._http.get(`/platform/projects/${projectId}/databases`);
+    const databases = result?.data ?? result ?? [];
+    return databases.map(db => db.environment);
   }
 
   async add(environment) {
-    const projectId = this._http.projectId;
-    const result = await this._http.post(`/platform/projects/${projectId}/environments`, {
+    const dbId = await this._http.resolveDbId();
+    const result = await this._http.post(`/platform/databases/${dbId}/add-environment`, {
       body: { environment },
     });
     return result?.data ?? result;

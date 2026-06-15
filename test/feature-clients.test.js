@@ -157,7 +157,7 @@ test('AdminClient schema helpers merge and remove fields by table name', async (
     path: '/platform/databases/db_admin/tables/tbl_posts',
     fields: { title: 'string' },
   });
-  assert.deepEqual(promoted, { path: '/platform/projects/proj_test/promote' });
+  assert.deepEqual(promoted, { path: '/platform/databases/db_admin/promote' });
   await assert.rejects(
     () => admin.schema.addField('comments', 'status', 'string'),
     /Table "comments" not found/,
