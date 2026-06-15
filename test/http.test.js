@@ -18,15 +18,13 @@ test('resolveDbId caches the environment-specific database id', async () => {
   client.request = async (method, path) => {
     calls += 1;
     assert.equal(method, 'GET');
-    assert.equal(path, '/platform/projects/proj_123');
+    assert.equal(path, '/platform/projects/proj_123/databases');
 
     return {
-      data: {
-        databases: [
-          { id: 'db_prod', environment: 'production' },
-          { id: 'db_stage', environment: 'staging' },
-        ],
-      },
+      data: [
+        { _id: 'db_prod', environment: 'production' },
+        { _id: 'db_stage', environment: 'staging' },
+      ],
     };
   };
 

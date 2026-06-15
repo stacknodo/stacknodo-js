@@ -1041,6 +1041,25 @@ const promotion = await client.admin.schema.promote();
 console.log(promotion);
 ```
 
+#### `export()`
+
+Export the portable, secret-free database schema (tables, fields, relations,
+and `allowedIPs`). It contains no row data and no secrets such as `jwtSecret`
+or `superuserToken`.
+
+Simple real-life example: snapshot the schema into version control before a
+migration.
+
+```js
+const schema = await client.admin.schema.export();
+console.log(schema);
+```
+
+For security, the SDK only exposes **schema** export. Full data backups — the
+database `/export` zip bundle and snapshot downloads — are intentionally **not**
+downloadable through the SDK. Use the Stacknodo dashboard if you need a full
+data backup.
+
 ### Snapshots: `client.admin.snapshots`
 
 #### `create({ name })`
@@ -1074,15 +1093,11 @@ Simple real-life example: roll back test data after a failed import.
 await client.admin.snapshots.restore('snapshot_123');
 ```
 
-#### `delete(snapshotId)`
+There is no `delete(snapshotId)`. Snapshot deletion is intentionally not exposed
+through the SDK; manage snapshot cleanup from the Stacknodo dashboard instead.
 
-Delete a snapshot.
-
-Simple real-life example: clean up an old temporary backup.
-
-```js
-await client.admin.snapshots.delete('snapshot_123');
-```
+Snapshots also cannot be **downloaded** through the SDK. A snapshot download is a
+full data backup, so for security it is only available from the dashboard.
 
 ### Projects: `client.admin.projects`
 
@@ -1127,18 +1142,18 @@ await client.admin.projects.update('proj_123', {
 
 #### `list()`
 
-List environments for the current project.
+List the environments that exist for the current project.
 
 Simple real-life example: verify whether staging already exists before a deployment step.
 
 ```js
 const environments = await client.admin.environments.list();
-console.log(environments);
+console.log(environments); // e.g. ['production', 'staging']
 ```
 
 #### `add(environment)`
 
-Add an environment to the current project.
+Add an environment to the current project's database.
 
 Simple real-life example: create a development environment for a new feature team.
 

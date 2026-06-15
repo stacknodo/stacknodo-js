@@ -132,11 +132,11 @@ export class HttpClient {
   /** Resolve the databaseId for the current project+environment. */
   async resolveDbId() {
     if (this._dbId) return this._dbId;
-    const project = await this.request('GET', `/platform/projects/${this.projectId}`);
-    const databases = project?.data?.databases || project?.databases || [];
+    const response = await this.request('GET', `/platform/projects/${this.projectId}/databases`);
+    const databases = response?.data || response?.databases || [];
     const db = databases.find(d => d.environment === this.environment) || databases[0];
     if (!db) throw new StacknodoError('No database found for this project/environment', { code: 'NO_DATABASE' });
-    this._dbId = db.id || db._id;
+    this._dbId = db._id || db.id;
     return this._dbId;
   }
 

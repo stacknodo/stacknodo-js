@@ -53,8 +53,23 @@ class SchemaAdmin {
   }
 
   async promote() {
-    const projectId = this._http.projectId;
-    const result = await this._http.post(`/platform/projects/${projectId}/promote`);
+    const dbId = await this._http.resolveDbId();
+    const result = await this._http.post(`/platform/databases/${dbId}/promote`);
+    return result?.data ?? result;
+  }
+
+  /**
+   * Export the portable, secret-free database schema (tables, fields, relations,
+   * allowedIPs). Contains no row data and no secrets such as jwtSecret or
+   * superuserToken.
+   *
+   * For security, the SDK only exposes schema export. Full data backups
+   * (the `/export` zip bundle and snapshot downloads) are intentionally NOT
+   * downloadable through the SDK — use the Stacknodo dashboard for those.
+   */
+  async export() {
+    const dbId = await this._http.resolveDbId();
+    const result = await this._http.get(`/platform/databases/${dbId}/schema`);
     return result?.data ?? result;
   }
 }
@@ -79,11 +94,9 @@ class SnapshotsAdmin {
     const result = await this._http.post(`/platform/databases/${dbId}/snapshots/${snapshotId}/restore`);
     return result?.data ?? result;
   }
-
-  async delete(snapshotId) {
-    const dbId = await this._http.resolveDbId();
-    return this._http.del(`/platform/databases/${dbId}/snapshots/${snapshotId}`);
-  }
+  // For security, snapshots can be created, listed, and restored, but NOT
+  // downloaded or deleted via the SDK. Downloading a snapshot would expose a
+  // full data backup, so it is intentionally omitted — use the dashboard.
 }
 
 class ProjectsAdmin {
@@ -111,13 +124,14 @@ class EnvironmentsAdmin {
 
   async list() {
     const projectId = this._http.projectId;
-    const result = await this._http.get(`/platform/projects/${projectId}/environments`);
-    return result?.data ?? result;
+    const result = await this._http.get(`/platform/projects/${projectId}/databases`);
+    const databases = result?.data ?? result ?? [];
+    return databases.map(db => db.environment);
   }
 
   async add(environment) {
-    const projectId = this._http.projectId;
-    const result = await this._http.post(`/platform/projects/${projectId}/environments`, {
+    const dbId = await this._http.resolveDbId();
+    const result = await this._http.post(`/platform/databases/${dbId}/add-environment`, {
       body: { environment },
     });
     return result?.data ?? result;
