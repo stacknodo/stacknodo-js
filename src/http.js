@@ -55,6 +55,8 @@ export class HttpClient {
     this.environment = environment;
     this.timeout     = timeout;
     this._dbId       = null;          // resolved lazily
+    this._orgId      = null;          // resolved lazily (admin namespace)
+    this._warnedOrgKeyData = false;   // one-shot guard for org-key-on-data warning
     this._sessionToken = null;
     this._platformSession = null;
     this._dataSession = null;
@@ -138,6 +140,41 @@ export class HttpClient {
     if (!db) throw new StacknodoError('No database found for this project/environment', { code: 'NO_DATABASE' });
     this._dbId = db._id || db.id;
     return this._dbId;
+  }
+
+  /**
+   * Resolve the organisation id bound to the current credential.
+   * Backed by `GET /platform/orgs/current`, which returns the org an org/project
+   * API key is bound to, or the member session's selected/default org.
+   */
+  async resolveOrgId() {
+    if (this._orgId) return this._orgId;
+    const response = await this.request('GET', '/platform/orgs/current');
+    const org = response?.data ?? response;
+    const id = org?.id || org?._id || org?.orgId || null;
+    if (!id) throw new StacknodoError('Could not resolve an organisation context for this credential', { code: 'NO_ORG' });
+    this._orgId = id;
+    return this._orgId;
+  }
+
+  /**
+   * Warn (once) when an organisation key is used for data access. Org keys are
+   * management-only and unrestricted; project keys (snk_proj_…) are the correct
+   * credential for data operations, especially in production.
+   */
+  _maybeWarnOrgKeyOnData(path, authMode) {
+    if (this._warnedOrgKeyData) return;
+    if (authMode !== 'apiKey') return;
+    if (!path || !path.startsWith('/data/')) return;
+    if (typeof this.apiKey !== 'string' || !this.apiKey.startsWith('snk_org_')) return;
+    this._warnedOrgKeyData = true;
+    const warn = typeof console !== 'undefined' && console.warn ? console.warn : null;
+    warn?.call(
+      console,
+      '[stacknodo] An organisation key (snk_org_…) is being used for data access. '
+      + 'Org keys are management-only and unrestricted — prefer a project key (snk_proj_…) '
+      + 'for data operations, especially in production. Use admin.bootstrapProject() to mint one.',
+    );
   }
 
   /**
@@ -299,6 +336,7 @@ export class HttpClient {
 
   async request(method, path, { body, query, headers: extra, stream, raw, auth } = {}) {
     const authMode = this._resolveAuthMode(path, auth);
+    this._maybeWarnOrgKeyOnData(path, authMode);
     let token = await this._getTokenForRequest(path, authMode);
 
     try {

@@ -127,9 +127,11 @@ export function createHttpMock(overrides = {}) {
 
 export function createHttpStub({
   dbId = 'db_test',
+  orgId = 'org_test',
   projectId = 'proj_test',
   baseUrl = 'https://api.stacknodo.com',
   apiKey = 'snk_proj_test',
+  timeout = 30000,
   getImpl = async () => ({ data: null }),
   postImpl = async () => ({ data: null }),
   putImpl = async () => ({ data: null }),
@@ -142,6 +144,7 @@ export function createHttpStub({
 } = {}) {
   const calls = {
     resolveDbId: 0,
+    resolveOrgId: 0,
     get: [],
     post: [],
     put: [],
@@ -164,10 +167,15 @@ export function createHttpStub({
     projectId,
     baseUrl,
     apiKey,
+    timeout,
     calls,
     async resolveDbId() {
       calls.resolveDbId += 1;
       return typeof dbId === 'function' ? dbId() : dbId;
+    },
+    async resolveOrgId() {
+      calls.resolveOrgId += 1;
+      return typeof orgId === 'function' ? orgId() : orgId;
     },
     async get(path, options) {
       calls.get.push({ path, options });

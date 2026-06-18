@@ -65,6 +65,18 @@ If you are new to Stacknodo, start with a project API key. It is the simplest pa
 | Database user token | Acting as an end user with RLS applied | Yes, through `client.dataAuth` |
 | API Docs test token | Manual one-database testing in curl or Postman | Usually no, prefer API keys in the SDK |
 
+Project keys can be scoped to specific environments when you create them (see
+`client.admin.apiKeys.createProjectKey`). A key limited to `staging` cannot be
+used against `production`, which makes them safe to hand to CI or per-environment
+deployments.
+
+Organisation keys (`snk_org_...`) are management-only and **unrestricted**: they
+bypass per-project and per-environment scoping. Use them for `client.admin`
+scripts, but **do not** use them for normal data access in production. If you
+call `client.from(...)` or `client.storage...` with an org key, the SDK prints a
+one-time warning recommending a project key. Use
+`client.admin.bootstrapProject()` to mint a scoped project key in one step.
+
 ### Project ID vs Database ID
 
 - `projectId` identifies the whole Stacknodo project. The SDK constructor uses this.
@@ -964,7 +976,14 @@ client.realtime.disconnect();
 
 ## Admin API: `client.admin`
 
-The admin namespace is for project and schema management. Use an organisation API key when you want the broadest admin access.
+The admin namespace is for project, key, and schema management. Use an
+organisation API key (`snk_org_...`) when you want the broadest admin access
+across every project in the organisation. A project key (`snk_proj_...`) also
+works for the schema, snapshot, and environment helpers of its own project.
+
+The organisation context is resolved automatically from your credential, so
+org-scoped helpers such as `client.admin.projects.*` and
+`client.admin.apiKeys.*` do not require you to pass an `orgId` by hand.
 
 ### Schema: `client.admin.schema`
 
@@ -1060,6 +1079,35 @@ database `/export` zip bundle and snapshot downloads — are intentionally **not
 downloadable through the SDK. Use the Stacknodo dashboard if you need a full
 data backup.
 
+#### `import(config, { mode })`
+
+Import a portable schema produced by `export()` (or written by hand) into the
+current environment database. `config` must be an object with a `tables` map.
+`mode` is either `'merge'` (the default — add new tables and fields, keep
+existing ones) or `'replace'` (make the schema match `config`).
+
+The call returns the server summary: `{ success, message, created, updated }`,
+plus an optional `warnings` array (for example, unknown field types or tables
+missing Row-Level Security).
+
+Simple real-life example: copy a schema captured in version control into a fresh
+environment.
+
+```js
+import { readFile } from 'node:fs/promises';
+
+const config = JSON.parse(await readFile('./schema.json', 'utf8'));
+const result = await client.admin.schema.import(config, { mode: 'merge' });
+
+console.log(result.message); // e.g. "Import complete: 3 created, 1 updated"
+for (const warning of result.warnings ?? []) {
+  console.warn(warning.code, warning.message);
+}
+```
+
+Import never carries secrets or row data — it only creates tables, fields, and
+relations, exactly like `export()`.
+
 ### Snapshots: `client.admin.snapshots`
 
 #### `create({ name })`
@@ -1101,9 +1149,13 @@ full data backup, so for security it is only available from the dashboard.
 
 ### Projects: `client.admin.projects`
 
-#### `list()`
+Projects are organisation-scoped. Every method resolves the organisation from
+your credential automatically; pass an explicit `orgId` only when a single key
+can see more than one organisation.
 
-List projects visible to the current admin token.
+#### `list(orgId?)`
+
+List projects in the organisation.
 
 Simple real-life example: show every project in an internal admin script.
 
@@ -1112,9 +1164,9 @@ const projects = await client.admin.projects.list();
 console.log(projects);
 ```
 
-#### `create({ name })`
+#### `create({ name, orgId })`
 
-Create a project.
+Create a project. `name` is required; `orgId` is optional.
 
 Simple real-life example: bootstrap a new client workspace.
 
@@ -1126,9 +1178,11 @@ const project = await client.admin.projects.create({
 console.log(project);
 ```
 
-#### `update(projectId, data)`
+#### `update(projectId, { name, orgId })`
 
-Update project metadata.
+Update project metadata. At least one updatable field (`name`) must be provided;
+calling it with nothing to change throws an `INVALID_ARG` error rather than
+sending an empty request.
 
 Simple real-life example: rename a project after a rebrand.
 
@@ -1136,6 +1190,108 @@ Simple real-life example: rename a project after a rebrand.
 await client.admin.projects.update('proj_123', {
   name: 'Northwind Sales Platform',
 });
+```
+
+There is no `projects.delete(...)`. Deleting a whole project is destructive and
+intentionally only available from the Stacknodo dashboard.
+
+### API keys: `client.admin.apiKeys`
+
+Mint and manage project API keys programmatically. This is the surface you use
+to move off an organisation key and onto scoped project keys.
+
+#### `list(orgId?)`
+
+List the API keys for the organisation.
+
+```js
+const keys = await client.admin.apiKeys.list();
+console.log(keys); // metadata only — raw key values are never returned here
+```
+
+#### `createProjectKey(projectId, { name, environments })`
+
+Create a new project key. `name` is required. `environments` restricts the key
+to a subset of `['production', 'staging', 'development']`; omit it (or pass
+`null`) to allow every environment.
+
+The response includes the **raw key once** as `rawKey` — store it immediately,
+because it is never retrievable again.
+
+Simple real-life example: mint a staging-only key for CI.
+
+```js
+const key = await client.admin.apiKeys.createProjectKey('proj_123', {
+  name: 'ci-staging',
+  environments: ['staging'],
+});
+
+process.env.CI_STACKNODO_KEY = key.rawKey; // save once; cannot be read again
+```
+
+#### `update(keyId, { name, environments })`
+
+Rename a key or change which environments it may target.
+
+```js
+await client.admin.apiKeys.update('key_123', {
+  environments: ['staging', 'development'],
+});
+```
+
+#### `revoke(keyId)`
+
+Permanently revoke a key.
+
+```js
+await client.admin.apiKeys.revoke('key_123');
+```
+
+### Bootstrap a project: `client.admin.bootstrapProject(options)`
+
+A one-call helper that creates a project, mints a scoped project key for it, and
+returns a ready-to-use project-scoped `Stacknodo` client. This is the
+recommended way to go from an organisation key to safe, per-project credentials.
+
+Options:
+
+| Option | Required | Meaning |
+| --- | --- | --- |
+| `name` | Yes | Name of the project to create |
+| `environments` | No | Environments the new key may target (default: all) |
+| `keyName` | No | Name for the new key (default: `"<name> key"`) |
+| `environment` | No | Environment the returned client targets (default: first of `environments`, else `production`) |
+| `persist` | No | `async (rawKey, { project, apiKey }) => {}` callback to store the secret yourself |
+
+Returns `{ project, apiKey, client }`. The `apiKey` is metadata only and never
+includes the secret. When you do **not** pass `persist`, the raw secret is also
+returned once as `rawKey`. When you pass a `persist` callback, the SDK hands the
+secret to your callback and omits `rawKey` from the result.
+
+Simple real-life example: provision a new tenant and persist its key to a vault.
+
+```js
+const { project, apiKey, client } = await client.admin.bootstrapProject({
+  name: 'Acme Tenant',
+  environments: ['production'],
+  persist: async (rawKey, { project: created }) => {
+    await vault.write(`stacknodo/${created.id ?? created._id}`, rawKey);
+  },
+});
+
+console.log('Created', project.id ?? project._id, 'with key', apiKey.id);
+
+// `client` is already authenticated as the new project key:
+await client.from('settings').create({ onboarded: true });
+```
+
+If you prefer to handle the secret yourself, omit `persist` and read `rawKey`:
+
+```js
+const { project, rawKey } = await client.admin.bootstrapProject({
+  name: 'Acme Tenant',
+});
+// rawKey is shown only this once.
 ```
 
 ### Environments: `client.admin.environments`
@@ -1165,13 +1321,16 @@ await client.admin.environments.add('development');
 
 #### `get()`
 
-Fetch the current organisation.
+Fetch the current organisation for your credential. Returns `{ id, name, slug,
+role }` (plus `projectId` when the credential is a project key). Calling it also
+warms the organisation cache, so later `projects.*` and `apiKeys.*` calls skip
+the extra lookup.
 
 Simple real-life example: print the organisation name in an admin dashboard startup script.
 
 ```js
 const org = await client.admin.org.get();
-console.log(org);
+console.log(org.name, '— you are', org.role);
 ```
 
 #### `usage()`

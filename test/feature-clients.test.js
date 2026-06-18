@@ -185,6 +185,155 @@ test('AdminClient exposes schema export but not data backup downloads', async ()
   assert.equal(typeof admin.schema.exportData, 'undefined');
 });
 
+test('AdminClient projects use org-scoped routes with auto org resolution', async () => {
+  const http = createHttpStub({
+    orgId: 'org_42',
+    getImpl: async (path) => ({ data: { path } }),
+    postImpl: async (path, options) => ({ data: { path, body: options.body } }),
+    putImpl: async (path, options) => ({ path, body: options.body }),
+  });
+
+  const admin = new AdminClient(http);
+  const listed = await admin.projects.list();
+  const created = await admin.projects.create({ name: 'Stamplyse' });
+  const updated = await admin.projects.update('proj_9', { name: 'Renamed' });
+
+  assert.deepEqual(listed, { path: '/platform/orgs/org_42/projects' });
+  assert.deepEqual(created, { path: '/platform/orgs/org_42/projects', body: { name: 'Stamplyse' } });
+  assert.deepEqual(updated, { path: '/platform/orgs/org_42/projects/proj_9', body: { name: 'Renamed' } });
+  assert.equal(http.calls.resolveOrgId, 3);
+  // An explicit orgId overrides resolution.
+  await admin.projects.list('org_explicit');
+  assert.equal(http.calls.get.at(-1).path, '/platform/orgs/org_explicit/projects');
+  assert.equal(http.calls.resolveOrgId, 3);
+  // Guard: updating with no fields must throw instead of sending an empty PUT.
+  await assert.rejects(() => admin.projects.update('proj_9'), /at least one field to update/);
+  await assert.rejects(() => admin.projects.update(), /requires a projectId/);
+});
+
+test('AdminClient org.get resolves current org and warms the id cache', async () => {
+  const http = createHttpStub({
+    getImpl: async (path) => ({ data: { id: 'org_live', name: 'Acme', slug: 'acme', role: 'owner', path } }),
+  });
+  const admin = new AdminClient(http);
+  const org = await admin.org.get();
+
+  assert.equal(http.calls.get.at(-1).path, '/platform/orgs/current');
+  assert.equal(org.id, 'org_live');
+  assert.equal(org.role, 'owner');
+  assert.equal(http._orgId, 'org_live'); // cache warmed for subsequent project calls
+});
+
+test('AdminClient schema.import posts a full config to the import endpoint', async () => {
+  const http = createHttpStub({
+    dbId: 'db_admin',
+    postImpl: async (path, options) => ({
+      success: true,
+      message: 'Import complete: 1 created, 0 updated',
+      created: 1,
+      updated: 0,
+      _path: path,
+      _body: options.body,
+      warnings: [{ code: 'missing_rls', message: 'no rls' }],
+    }),
+  });
+
+  const admin = new AdminClient(http);
+  const config = { tables: { posts: { fields: { title: 'string' } } } };
+  const result = await admin.schema.import(config, { mode: 'replace' });
+
+  assert.equal(result._path, '/platform/databases/db_admin/import');
+  assert.deepEqual(result._body, { config, mode: 'replace' });
+  assert.equal(result.created, 1);
+  assert.deepEqual(result.warnings, [{ code: 'missing_rls', message: 'no rls' }]);
+  await assert.rejects(() => admin.schema.import({}), /requires a config object with a `tables` map/);
+});
+
+test('AdminClient apiKeys manage project keys via the key lifecycle routes', async () => {
+  const http = createHttpStub({
+    orgId: 'org_42',
+    getImpl: async (path) => ({ data: [{ id: 'key_1', scope: 'project', prefix: 'ab12', path }] }),
+    postImpl: async (path, options) => ({
+      data: { id: 'key_new', name: options.body.name, rawKey: 'snk_proj_secret', prefix: 'cd34', scope: 'project', allowedEnvironments: options.body.allowedEnvironments ?? null, _path: path },
+    }),
+    putImpl: async (path, options) => ({ data: { _path: path, _body: options.body } }),
+    delImpl: async (path) => ({ success: true, _path: path }),
+  });
+
+  const admin = new AdminClient(http);
+  const listed = await admin.apiKeys.list();
+  const created = await admin.apiKeys.createProjectKey('proj_9', { name: 'web', environments: ['production'] });
+  const updated = await admin.apiKeys.update('key_new', { name: 'web-prod', environments: ['production', 'staging'] });
+  const revoked = await admin.apiKeys.revoke('key_new');
+
+  assert.equal(http.calls.get.at(-1).path, '/platform/orgs/org_42/api-keys');
+  assert.equal(listed[0].id, 'key_1');
+  assert.equal(created._path, '/platform/projects/proj_9/api-keys');
+  assert.deepEqual(http.calls.post.at(-1).options.body, { name: 'web', allowedEnvironments: ['production'] });
+  assert.equal(created.rawKey, 'snk_proj_secret');
+  assert.equal(updated._path, '/platform/api-keys/key_new');
+  assert.deepEqual(updated._body, { name: 'web-prod', allowedEnvironments: ['production', 'staging'] });
+  assert.deepEqual(revoked, { success: true, _path: '/platform/api-keys/key_new' });
+});
+
+test('AdminClient bootstrapProject creates project + key and returns a project-scoped client', async () => {
+  const http = createHttpStub({
+    orgId: 'org_42',
+    baseUrl: 'https://api.stacknodo.com',
+    postImpl: async (path, options) => {
+      if (path === '/platform/orgs/org_42/projects') {
+        return { data: { _id: 'proj_new', name: options.body.name } };
+      }
+      if (path === '/platform/projects/proj_new/api-keys') {
+        return { data: { id: 'key_new', name: options.body.name, rawKey: 'snk_proj_rawsecret', prefix: 'ef56', scope: 'project', allowedEnvironments: options.body.allowedEnvironments ?? null, createdAt: '2026-01-01' } };
+      }
+      throw new Error(`unexpected POST ${path}`);
+    },
+  });
+
+  const admin = new AdminClient(http);
+  const result = await admin.bootstrapProject({ name: 'Stamplyse', environments: ['production'] });
+
+  assert.equal(result.project._id, 'proj_new');
+  assert.equal(result.apiKey.id, 'key_new');
+  assert.equal(result.apiKey.scope, 'project');
+  assert.equal(result.apiKey.rawKey, undefined); // metadata must not echo the raw key
+  assert.equal(result.rawKey, 'snk_proj_rawsecret'); // returned once when no persist callback
+  // The returned client is project-scoped and authenticated with the new key.
+  assert.equal(result.client.constructor.name, 'Stacknodo');
+  assert.equal(result.client._http.apiKey, 'snk_proj_rawsecret');
+  assert.equal(result.client._http.projectId, 'proj_new');
+  assert.equal(result.client._http.environment, 'production');
+});
+
+test('AdminClient bootstrapProject with persist callback withholds the raw key from the result', async () => {
+  const http = createHttpStub({
+    orgId: 'org_42',
+    postImpl: async (path, options) => {
+      if (path.endsWith('/projects')) return { data: { id: 'proj_p', name: options.body.name } };
+      return { data: { id: 'key_p', name: options.body.name, rawKey: 'snk_proj_persisted', prefix: 'gh78', scope: 'project', allowedEnvironments: null } };
+    },
+  });
+
+  const admin = new AdminClient(http);
+  const persisted = [];
+  const metaSeen = [];
+  const result = await admin.bootstrapProject({
+    name: 'Vault',
+    persist: async (rawKey, meta) => { persisted.push(rawKey); metaSeen.push(meta); },
+  });
+
+  assert.deepEqual(persisted, ['snk_proj_persisted']);
+  assert.equal(result.rawKey, undefined); // not returned when persisted
+  assert.equal(result.client._http.apiKey, 'snk_proj_persisted'); // client still authenticated
+  // The callback receives project + key metadata so it can key the secret by
+  // project id without a TDZ reference to the not-yet-returned result.
+  assert.equal(metaSeen.length, 1);
+  assert.equal(metaSeen[0].project.id, 'proj_p');
+  assert.equal(metaSeen[0].apiKey.id, 'key_p');
+  assert.equal(metaSeen[0].apiKey.rawKey, undefined); // metadata only, never the secret
+});
+
 test('RealtimeClient dispatches matching events and unsubscribes cleanly', () => {
   const sent = [];
   const events = [];
