@@ -236,6 +236,9 @@ class ApiKeysAdmin {
     const body = {};
     if (name !== undefined) body.name = name;
     if (environments !== undefined) body.allowedEnvironments = environments;
+    if (!Object.keys(body).length) {
+      throw new StacknodoError('apiKeys.update requires at least one field to update (name, environments)', { code: 'INVALID_ARG' });
+    }
     const result = await this._http.put(`/platform/api-keys/${keyId}`, { body });
     return result?.data ?? result;
   }
