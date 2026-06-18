@@ -314,11 +314,21 @@ test('AdminClient bootstrapProject with persist callback withholds the raw key f
 
   const admin = new AdminClient(http);
   const persisted = [];
-  const result = await admin.bootstrapProject({ name: 'Vault', persist: async (rawKey) => { persisted.push(rawKey); } });
+  const metaSeen = [];
+  const result = await admin.bootstrapProject({
+    name: 'Vault',
+    persist: async (rawKey, meta) => { persisted.push(rawKey); metaSeen.push(meta); },
+  });
 
   assert.deepEqual(persisted, ['snk_proj_persisted']);
   assert.equal(result.rawKey, undefined); // not returned when persisted
   assert.equal(result.client._http.apiKey, 'snk_proj_persisted'); // client still authenticated
+  // The callback receives project + key metadata so it can key the secret by
+  // project id without a TDZ reference to the not-yet-returned result.
+  assert.equal(metaSeen.length, 1);
+  assert.equal(metaSeen[0].project.id, 'proj_p');
+  assert.equal(metaSeen[0].apiKey.id, 'key_p');
+  assert.equal(metaSeen[0].apiKey.rawKey, undefined); // metadata only, never the secret
 });
 
 test('RealtimeClient dispatches matching events and unsubscribes cleanly', () => {

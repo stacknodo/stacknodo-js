@@ -137,8 +137,3 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-
-# Internal triage / improvement scratch notes — keep local only, never commit
-*-triage.md
-improvement-triage.md
-platform-improvement-triage.md

@@ -1259,7 +1259,7 @@ Options:
 | `environments` | No | Environments the new key may target (default: all) |
 | `keyName` | No | Name for the new key (default: `"<name> key"`) |
 | `environment` | No | Environment the returned client targets (default: first of `environments`, else `production`) |
-| `persist` | No | `async (rawKey) => {}` callback to store the secret yourself |
+| `persist` | No | `async (rawKey, { project, apiKey }) => {}` callback to store the secret yourself |
 
 Returns `{ project, apiKey, client }`. The `apiKey` is metadata only and never
 includes the secret. When you do **not** pass `persist`, the raw secret is also
@@ -1272,12 +1272,12 @@ Simple real-life example: provision a new tenant and persist its key to a vault.
 const { project, apiKey, client } = await client.admin.bootstrapProject({
   name: 'Acme Tenant',
   environments: ['production'],
-  persist: async (rawKey) => {
-    await vault.write(`stacknodo/${project.id}`, rawKey);
+  persist: async (rawKey, { project: created }) => {
+    await vault.write(`stacknodo/${created.id ?? created._id}`, rawKey);
   },
 });
 
-console.log('Created', project.id, 'with key', apiKey.id);
+console.log('Created', project.id ?? project._id, 'with key', apiKey.id);
 
 // `client` is already authenticated as the new project key:
 await client.from('settings').create({ onboarded: true });

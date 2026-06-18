@@ -277,7 +277,7 @@ export class AdminClient {
    *   environments?: string[] | null,
    *   keyName?: string,
    *   environment?: string,
-   *   persist?: (rawKey: string) => void | Promise<void>,
+   *   persist?: (rawKey: string, meta: { project: object, apiKey: object }) => void | Promise<void>,
    * }} opts
    * @returns {Promise<{ project: object, apiKey: object, client: import('./client.js').Stacknodo, rawKey?: string }>}
    */
@@ -324,9 +324,12 @@ export class AdminClient {
       createdAt: key.createdAt,
     };
 
-    // 5. Hand off the raw key: persist-and-forget, or return it once.
+    // 5. Hand off the raw key: persist-and-forget, or return it once. The
+    //    callback also receives the freshly created project + key metadata so it
+    //    can key the secret by project id without a temporal-dead-zone reference
+    //    to the not-yet-returned result.
     if (typeof persist === 'function') {
-      await persist(rawKey);
+      await persist(rawKey, { project, apiKey });
       return { project, apiKey, client };
     }
     return { project, apiKey, client, rawKey };
