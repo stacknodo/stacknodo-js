@@ -1180,7 +1180,9 @@ console.log(project);
 
 #### `update(projectId, { name, orgId })`
 
-Update project metadata.
+Update project metadata. At least one updatable field (`name`) must be provided;
+calling it with nothing to change throws an `INVALID_ARG` error rather than
+sending an empty request.
 
 Simple real-life example: rename a project after a rebrand.
 

@@ -143,6 +143,7 @@ class ProjectsAdmin {
 
   async update(projectId, { name, orgId } = {}) {
     if (!projectId) throw new StacknodoError('projects.update requires a projectId', { code: 'INVALID_ARG' });
+    if (name === undefined) throw new StacknodoError('projects.update requires at least one field to update (name)', { code: 'INVALID_ARG' });
     const org = orgId || await this._http.resolveOrgId();
     const result = await this._http.put(`/platform/orgs/${org}/projects/${projectId}`, { body: { name } });
     return result?.data ?? result;

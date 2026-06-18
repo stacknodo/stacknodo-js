@@ -206,6 +206,9 @@ test('AdminClient projects use org-scoped routes with auto org resolution', asyn
   await admin.projects.list('org_explicit');
   assert.equal(http.calls.get.at(-1).path, '/platform/orgs/org_explicit/projects');
   assert.equal(http.calls.resolveOrgId, 3);
+  // Guard: updating with no fields must throw instead of sending an empty PUT.
+  await assert.rejects(() => admin.projects.update('proj_9'), /at least one field to update/);
+  await assert.rejects(() => admin.projects.update(), /requires a projectId/);
 });
 
 test('AdminClient org.get resolves current org and warms the id cache', async () => {
