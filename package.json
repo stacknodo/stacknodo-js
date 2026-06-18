@@ -1,6 +1,6 @@
 {
   "name": "@stacknodo/sdk",
-  "version": "1.0.8",
+  "version": "1.1.0",
   "description": "Official Stacknodo JavaScript SDK",
   "type": "module",
   "main": "./src/index.js",
