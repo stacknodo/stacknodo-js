@@ -178,6 +178,80 @@ test('data session retries once after a 401 by refreshing against the request db
   assert.equal(client.getDataSession().accessToken, 'data-token-new');
 });
 
+test('resolveOrgId caches the org id from /platform/orgs/current', async () => {
+  const client = new HttpClient({
+    baseUrl: 'https://api.stacknodo.com',
+    apiKey: 'snk_org_test',
+    projectId: 'proj_123',
+    environment: 'production',
+    timeout: 1000,
+  });
+
+  let calls = 0;
+  client.request = async (method, path) => {
+    calls += 1;
+    assert.equal(method, 'GET');
+    assert.equal(path, '/platform/orgs/current');
+    return { data: { id: 'org_live', name: 'Acme', slug: 'acme', role: 'org-admin' } };
+  };
+
+  assert.equal(await client.resolveOrgId(), 'org_live');
+  assert.equal(await client.resolveOrgId(), 'org_live');
+  assert.equal(calls, 1);
+});
+
+test('an org key used for data access warns once', async (t) => {
+  mockFetch(t, async () => new Response(JSON.stringify({ success: true, data: [] }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  }));
+
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => { warnings.push(args.join(' ')); };
+  t.after(() => { console.warn = originalWarn; });
+
+  const client = new HttpClient({
+    baseUrl: 'https://api.stacknodo.com',
+    apiKey: 'snk_org_secret',
+    projectId: 'proj_123',
+    environment: 'production',
+    timeout: 1000,
+  });
+
+  await client.request('GET', '/data/db_123/posts');
+  await client.request('GET', '/data/db_123/comments');
+  // Platform/admin paths with the same org key must never warn.
+  await client.request('GET', '/platform/orgs/current');
+
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /Org keys are management-only/);
+  assert.match(warnings[0], /snk_proj_/);
+});
+
+test('a project key used for data access does not warn', async (t) => {
+  mockFetch(t, async () => new Response(JSON.stringify({ success: true, data: [] }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  }));
+
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => { warnings.push(args.join(' ')); };
+  t.after(() => { console.warn = originalWarn; });
+
+  const client = new HttpClient({
+    baseUrl: 'https://api.stacknodo.com',
+    apiKey: 'snk_proj_secret',
+    projectId: 'proj_123',
+    environment: 'production',
+    timeout: 1000,
+  });
+
+  await client.request('GET', '/data/db_123/posts');
+  assert.equal(warnings.length, 0);
+});
+
 test('network failures are normalized into StacknodoError instances', async (t) => {
   mockFetch(t, async () => {
     throw new Error('socket hang up');
