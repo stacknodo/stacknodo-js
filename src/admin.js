@@ -308,6 +308,9 @@ export class AdminClient {
     // 3. Build a ready project-scoped client from the new key. Dynamic import keeps
     //    admin.js free of a static cycle with client.js.
     const { Stacknodo } = await import('./client.js');
+    if (environment && Array.isArray(environments) && environments.length && !environments.includes(environment)) {
+      throw new StacknodoError('bootstrapProject `environment` must be one of the allowed `environments` for the new key', { code: 'INVALID_ARG' });
+    }
     const targetEnv = environment
       || (Array.isArray(environments) && environments.length ? environments[0] : 'production');
     const client = new Stacknodo({
