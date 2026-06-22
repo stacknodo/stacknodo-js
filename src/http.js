@@ -397,8 +397,19 @@ export class HttpClient {
       const session = this._getSessionState(mode);
       if (!session?.accessToken) continue;
       if (this._shouldRefreshSession(session)) {
-        try { await this._refreshSession(mode); }
-        catch { /* keep the existing token if refresh fails */ }
+        // _refreshSession() clears the session state on any failure, so snapshot
+        // it first and restore the still-valid token if the refresh fails.
+        const snapshot = { ...session };
+        try {
+          await this._refreshSession(mode);
+        } catch {
+          if (mode === 'dataSession') {
+            this._dataSession = snapshot;
+          } else {
+            this._platformSession = snapshot;
+            this._sessionToken = snapshot.accessToken || null;
+          }
+        }
       }
       return this._getSessionState(mode)?.accessToken || null;
     }

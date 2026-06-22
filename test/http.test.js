@@ -86,6 +86,29 @@ test('getRealtimeToken prefers apiKey, then data session, then platform session'
   assert.equal(await keyless.getRealtimeToken(), 'data_tok'); // data session wins over platform
 });
 
+test('getRealtimeToken keeps the still-valid token when a best-effort refresh fails', async () => {
+  const keyless = new HttpClient({
+    baseUrl: 'https://api.stacknodo.com',
+    apiKey: undefined,
+    projectId: 'proj_123',
+    environment: 'production',
+    timeout: 1000,
+  });
+  keyless._dbId = 'db_live';
+  keyless.setDataSession({ accessToken: 'data_tok', refreshToken: 'refresh_tok' });
+
+  // Force the refresh path and mirror the real failure behavior: _refreshSession()
+  // clears the session state before rethrowing.
+  keyless._shouldRefreshSession = () => true;
+  keyless._refreshSession = async (mode) => {
+    keyless._clearSessionState(mode);
+    throw new Error('transient network failure');
+  };
+
+  assert.equal(await keyless.getRealtimeToken(), 'data_tok');
+  assert.equal(keyless.getDataSession()?.accessToken, 'data_tok'); // session restored
+});
+
 test('request sends project headers, API key auth, and JSON body', async (t) => {
   const seen = [];
   mockFetch(t, async (url, init) => {
