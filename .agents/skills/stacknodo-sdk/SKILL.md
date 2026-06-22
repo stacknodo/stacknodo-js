@@ -91,7 +91,7 @@ Use `schema.json` alongside those docs whenever you need the live tables, fields
 3. **Thenable query builder** — `client.from('table')` returns a chainable builder that executes when awaited.
 4. **Namespace pattern** — `client.storage`, `client.platformAuth`, `client.ai`, `client.admin`, `client.realtime` are lazy-loaded sub-clients. `client.auth` remains a compatibility alias for `client.platformAuth`.
 5. **Environment-aware** — One API key works across production, staging, and development environments.
-6. **Keyless browser clients** — `apiKey` is optional. For front-end/end-user apps, construct with just `projectId` (+ `environment`) and authenticate via `client.dataAuth.login(...)`; the `databaseId` resolves through a public, non-secret endpoint. Never put a `snk_proj_…` / `snk_org_…` key in browser code.
+6. **Keyless browser clients** — `apiKey` is optional. For front-end/end-user apps, construct with just `projectId` (+ `environment`) and authenticate via `client.dataAuth.login(...)`; the `databaseId` resolves through a public, non-secret endpoint. `client.realtime` also works keyless after login (the WebSocket uses the session token, RLS enforced). Never put a `snk_proj_…` / `snk_org_…` key in browser code.
 
 ## Environment Variables
 

@@ -46,7 +46,7 @@ function normaliseSessionPayload(payload = {}) {
 
 export class HttpClient {
   /**
-   * @param {{ baseUrl: string, apiKey: string, projectId: string, environment: string, timeout: number }} opts
+   * @param {{ baseUrl: string, apiKey?: string, projectId: string, environment: string, timeout: number }} opts
    */
   constructor({ baseUrl, apiKey, projectId, environment, timeout }) {
     this.baseUrl     = baseUrl.replace(/\/$/, '');
@@ -196,7 +196,7 @@ export class HttpClient {
   /**
    * @param {string} method
    * @param {string} path
-   * @param {{ body?: any, query?: Record<string,any>, headers?: Record<string,string>, stream?: boolean, raw?: boolean, auth?: 'apiKey' | 'session' }} opts
+   * @param {{ body?: any, query?: Record<string,any>, headers?: Record<string,string>, stream?: boolean, raw?: boolean, auth?: 'none' | 'apiKey' | 'session' | 'platformSession' | 'dataSession' | 'auto' }} opts
    */
   _resolveAuthMode(path, auth) {
     if (auth === 'session') return 'platformSession';
@@ -379,6 +379,31 @@ export class HttpClient {
   async refreshDataSession() {
     await this._refreshSession('dataSession');
     return this._dataSession;
+  }
+
+  /**
+   * Pick the best token for the realtime WebSocket connection.
+   *
+   * Priority: the API key (server apps / superuser), then an active data-session
+   * token (keyless browser clients — Row-Level Security stays enforced), then a
+   * platform-session token. Session tokens are refreshed first when close to
+   * expiry. Returns `null` when no credential is available, so the caller can
+   * surface a clear "log in first" error.
+   */
+  async getRealtimeToken() {
+    if (this.apiKey) return this.apiKey;
+
+    for (const mode of ['dataSession', 'platformSession']) {
+      const session = this._getSessionState(mode);
+      if (!session?.accessToken) continue;
+      if (this._shouldRefreshSession(session)) {
+        try { await this._refreshSession(mode); }
+        catch { /* keep the existing token if refresh fails */ }
+      }
+      return this._getSessionState(mode)?.accessToken || null;
+    }
+
+    return null;
   }
 
   get(path, opts)  { return this.request('GET', path, opts); }

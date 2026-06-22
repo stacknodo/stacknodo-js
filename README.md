@@ -106,7 +106,9 @@ Both `projectId` and the resolved `databaseId` are non-secret identifiers. **Nev
 put a project or organisation API key (`snk_proj_…` / `snk_org_…`) in browser code —
 those keys are privileged and would let anyone reading your bundle bypass
 Row-Level Security. Keep API keys on the server for `client.admin`, AI, functions,
-storage, and server-side data access.
+storage, and server-side data access. After `client.dataAuth.login(...)`,
+`client.realtime` also works keyless — the WebSocket uses the logged-in user's
+Row-Level-Security-scoped token.
 
 ## Detailed Onboarding
 
@@ -955,6 +957,12 @@ console.log(result);
 ## Real-Time: `client.realtime`
 
 Use this namespace to subscribe to table changes over WebSocket.
+
+**Authentication.** Realtime uses your `apiKey` when one is set. For keyless
+browser clients, log in first with `client.dataAuth.login(...)` (or
+`client.platformAuth.login(...)`) and the WebSocket connects with that session
+token — Row-Level Security stays enforced for data-user sessions. With no
+credential at all, `connect()` / `subscribe()` throw a `NO_REALTIME_AUTH` error.
 
 ### `connect()`
 

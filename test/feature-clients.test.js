@@ -6,6 +6,7 @@ import { AiClient } from '../src/ai.js';
 import { FunctionsClient } from '../src/functions.js';
 import { RealtimeClient } from '../src/realtime.js';
 import { StorageClient } from '../src/storage.js';
+import { HttpClient } from '../src/http.js';
 import { createHttpStub, createSseResponse, collectAsyncIterable } from '../test-support/helpers.js';
 
 test('StorageClient uploads files, builds URLs, and downloads buffers', async () => {
@@ -395,4 +396,51 @@ test('RealtimeClient dispatches matching events and unsubscribes cleanly', () =>
   assert.equal(realtime._subscriptions.size, 0);
   assert.equal(realtime._connected, false);
   assert.equal(closed, true);
+});
+
+test('RealtimeClient connects with a data-session token when keyless', async () => {
+  const http = new HttpClient({
+    baseUrl: 'https://api.stacknodo.com',
+    apiKey: undefined,
+    projectId: 'proj_123',
+    environment: 'production',
+    timeout: 1000,
+  });
+  http._dbId = 'db_live';
+  http.setDataSession({ accessToken: 'data_jwt' });
+
+  let capturedUrl = null;
+  const originalWS = globalThis.WebSocket;
+  globalThis.WebSocket = class {
+    constructor(url) {
+      capturedUrl = url;
+      this.readyState = 1;
+      queueMicrotask(() => this.onopen && this.onopen());
+    }
+    send() {}
+    close() {}
+  };
+
+  try {
+    const realtime = new RealtimeClient(http);
+    await realtime.connect();
+  } finally {
+    globalThis.WebSocket = originalWS;
+  }
+
+  assert.equal(capturedUrl, 'wss://api.stacknodo.com/realtime?dbId=db_live&token=data_jwt');
+});
+
+test('RealtimeClient.connect throws a clear error when keyless and not logged in', async () => {
+  const http = new HttpClient({
+    baseUrl: 'https://api.stacknodo.com',
+    apiKey: undefined,
+    projectId: 'proj_123',
+    environment: 'production',
+    timeout: 1000,
+  });
+  http._dbId = 'db_live';
+
+  const realtime = new RealtimeClient(http);
+  await assert.rejects(() => realtime.connect(), /Realtime requires authentication/);
 });

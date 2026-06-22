@@ -32,6 +32,8 @@ export class Stacknodo {
    * `projectId` + `environment` through a public, non-secret endpoint, so no
    * privileged key is shipped to the client. Provide `apiKey` for server-side
    * data access and for the `admin`, `ai`, `functions`, and `storage` namespaces.
+   * `realtime` works either with an `apiKey` or, for keyless clients, after
+   * `client.dataAuth.login(...)` / `client.platformAuth.login(...)`.
    */
   constructor({
     projectId,

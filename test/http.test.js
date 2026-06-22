@@ -60,6 +60,32 @@ test('resolveDbId uses the public keyless resolver when no API key is set', asyn
   assert.equal(calls[0].opts.auth, 'none');
 });
 
+test('getRealtimeToken prefers apiKey, then data session, then platform session', async () => {
+  const withKey = new HttpClient({
+    baseUrl: 'https://api.stacknodo.com',
+    apiKey: 'snk_proj_test',
+    projectId: 'proj_123',
+    environment: 'production',
+    timeout: 1000,
+  });
+  assert.equal(await withKey.getRealtimeToken(), 'snk_proj_test');
+
+  const keyless = new HttpClient({
+    baseUrl: 'https://api.stacknodo.com',
+    apiKey: undefined,
+    projectId: 'proj_123',
+    environment: 'production',
+    timeout: 1000,
+  });
+  assert.equal(await keyless.getRealtimeToken(), null);
+
+  keyless.setPlatformSession({ accessToken: 'platform_tok' });
+  assert.equal(await keyless.getRealtimeToken(), 'platform_tok');
+
+  keyless.setDataSession({ accessToken: 'data_tok' });
+  assert.equal(await keyless.getRealtimeToken(), 'data_tok'); // data session wins over platform
+});
+
 test('request sends project headers, API key auth, and JSON body', async (t) => {
   const seen = [];
   mockFetch(t, async (url, init) => {
