@@ -80,8 +80,35 @@ one-time warning recommending a project key. Use
 ### Project ID vs Database ID
 
 - `projectId` identifies the whole Stacknodo project. The SDK constructor uses this.
-- `databaseId` identifies one concrete environment database. The SDK resolves it for you automatically.
-- If you already know the exact database ID, you can pass `databaseId` to the constructor to skip the lazy lookup.
+- `databaseId` identifies one concrete environment database. The SDK resolves it for you automatically from `projectId` + `environment`.
+- If you already know the exact database ID, you can pass `databaseId` to the constructor to skip the lookup.
+
+### Keyless clients for the browser
+
+`apiKey` is **optional**. For front-end apps that act as a signed-in end user,
+omit it and authenticate with `client.dataAuth.login(...)`:
+
+```js
+const client = new Stacknodo({
+  projectId: import.meta.env.VITE_STACKNODO_PROJECT_ID,
+  environment: 'production',
+});
+
+// Resolves the database id from a public, non-secret endpoint, then logs the
+// end user in. Their JWT (scoped by Row-Level Security) authorises every
+// following request — no API key is ever shipped to the browser.
+await client.dataAuth.login({ email, password });
+
+const myOrders = await client.from('orders').order('createdAt', 'desc');
+```
+
+Both `projectId` and the resolved `databaseId` are non-secret identifiers. **Never**
+put a project or organisation API key (`snk_proj_…` / `snk_org_…`) in browser code —
+those keys are privileged and would let anyone reading your bundle bypass
+Row-Level Security. Keep API keys on the server for `client.admin`, AI, functions,
+storage, and server-side data access. After `client.dataAuth.login(...)`,
+`client.realtime` also works keyless — the WebSocket uses the logged-in user's
+Row-Level-Security-scoped token.
 
 ## Detailed Onboarding
 
@@ -931,6 +958,12 @@ console.log(result);
 
 Use this namespace to subscribe to table changes over WebSocket.
 
+**Authentication.** Realtime uses your `apiKey` when one is set. For keyless
+browser clients, log in first with `client.dataAuth.login(...)` (or
+`client.platformAuth.login(...)`) and the WebSocket connects with that session
+token — Row-Level Security stays enforced for data-user sessions. With no
+credential at all, `connect()` / `subscribe()` throw a `NO_REALTIME_AUTH` error.
+
 ### `connect()`
 
 Open the WebSocket connection explicitly.
@@ -1014,6 +1047,36 @@ await client.admin.schema.createTable('leads', {
 });
 ```
 
+**Field types.** Each field's type is one of:
+
+| Type | Stores |
+| --- | --- |
+| `string` | Text |
+| `number` | Numeric value |
+| `boolean` | `true` / `false` |
+| `date` | ISO 8601 timestamp |
+| `secret` | Write-only value (e.g. a password) |
+| `object` | JSON object — stored and returned as parsed JSON |
+| `array` | JSON array — stored and returned as parsed JSON |
+
+**Optional fields.** By default every field in the schema must be included when
+you create a row (the value may be `null`). Append `?` to the type to mark a
+field optional — it can then be omitted entirely on insert. This is ideal for
+nullable foreign keys and columns that have a database default.
+
+```js
+await client.admin.schema.createTable('signatures', {
+  fields: {
+    name: 'string',
+    templateId: 'string?', // optional — can be omitted when inserting
+  },
+});
+
+// With `templateId` optional, both of these inserts are valid:
+await client.from('signatures').create({ name: 'NDA', templateId: 't_123' });
+await client.from('signatures').create({ name: 'Blank' }); // templateId omitted
+```
+
 #### `addField(tableName, fieldName, fieldType)`
 
 Add one field to an existing table.
@@ -1023,6 +1086,10 @@ Simple real-life example: add a `phoneNumber` field to customers.
 ```js
 await client.admin.schema.addField('customers', 'phoneNumber', 'string');
 ```
+
+The same type syntax applies here, including the optional `?` suffix — for
+example `addField('customers', 'referrerId', 'string?')` adds a field you can
+omit when inserting rows.
 
 #### `deleteTable(tableId)`
 

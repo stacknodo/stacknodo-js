@@ -3,6 +3,8 @@
  *
  * Usage: client.realtime.subscribe('posts', '*', callback)
  */
+import { StacknodoError } from './errors.js';
+
 export class RealtimeClient {
   /** @param {import('./http.js').HttpClient} http */
   constructor(http) {
@@ -20,7 +22,15 @@ export class RealtimeClient {
 
     const wsBase = this._http.baseUrl.replace(/^http/, 'ws');
     const dbId   = await this._http.resolveDbId();
-    const url    = `${wsBase}/realtime?dbId=${dbId}&token=${encodeURIComponent(this._http.apiKey)}`;
+    const token  = await this._http.getRealtimeToken();
+    if (!token) {
+      throw new StacknodoError(
+        'Realtime requires authentication. Provide an apiKey, or log in first via '
+        + 'client.dataAuth.login(...) or client.platformAuth.login(...) before subscribing.',
+        { code: 'NO_REALTIME_AUTH' },
+      );
+    }
+    const url    = `${wsBase}/realtime?dbId=${dbId}&token=${encodeURIComponent(token)}`;
     const WebSocketImpl = typeof WebSocket !== 'undefined' ? WebSocket : (await import('ws')).default;
 
     return new Promise((resolve, reject) => {

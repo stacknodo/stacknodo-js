@@ -20,12 +20,20 @@ export class Stacknodo {
   /**
    * @param {{
    *   projectId: string,
-   *   apiKey: string,
+   *   apiKey?: string,
    *   environment?: string,
    *   baseUrl?: string,
    *   timeout?: number,
    *   databaseId?: string,
    * }} opts
+   *
+   * `apiKey` is optional. Omit it for browser / end-user flows that authenticate
+   * with `client.dataAuth.login(...)`: the database id is resolved from
+   * `projectId` + `environment` through a public, non-secret endpoint, so no
+   * privileged key is shipped to the client. Provide `apiKey` for server-side
+   * data access and for the `admin`, `ai`, `functions`, and `storage` namespaces.
+   * `realtime` works either with an `apiKey` or, for keyless clients, after
+   * `client.dataAuth.login(...)` / `client.platformAuth.login(...)`.
    */
   constructor({
     projectId,
@@ -36,7 +44,6 @@ export class Stacknodo {
     databaseId,
   }) {
     if (!projectId) throw new Error('projectId is required');
-    if (!apiKey)    throw new Error('apiKey is required');
 
     this._http = new HttpClient({ baseUrl, apiKey, projectId, environment, timeout });
 
