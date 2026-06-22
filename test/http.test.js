@@ -33,6 +33,33 @@ test('resolveDbId caches the environment-specific database id', async () => {
   assert.equal(calls, 1);
 });
 
+test('resolveDbId uses the public keyless resolver when no API key is set', async () => {
+  const client = new HttpClient({
+    baseUrl: 'https://api.stacknodo.com',
+    apiKey: undefined,
+    projectId: 'proj_123',
+    environment: 'production',
+    timeout: 1000,
+  });
+
+  const calls = [];
+  client.request = async (method, path, opts) => {
+    calls.push({ method, path, opts });
+    return {
+      success: true,
+      data: { databaseId: 'db_prod', environment: 'production', projectId: 'proj_123' },
+    };
+  };
+
+  assert.equal(await client.resolveDbId(), 'db_prod');
+  assert.equal(await client.resolveDbId(), 'db_prod'); // cached, no second request
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, 'GET');
+  assert.equal(calls[0].path, '/platform/projects/proj_123/database-id');
+  assert.deepEqual(calls[0].opts.query, { environment: 'production' });
+  assert.equal(calls[0].opts.auth, 'none');
+});
+
 test('request sends project headers, API key auth, and JSON body', async (t) => {
   const seen = [];
   mockFetch(t, async (url, init) => {

@@ -134,6 +134,22 @@ export class HttpClient {
   /** Resolve the databaseId for the current project+environment. */
   async resolveDbId() {
     if (this._dbId) return this._dbId;
+
+    // Without an API key (e.g. a browser app that logs in via dataAuth.login),
+    // resolve the database id through the public, keyless endpoint. It returns
+    // only non-secret identifiers, so no privileged key is shipped to the client.
+    if (!this.apiKey) {
+      const response = await this.request(
+        'GET',
+        `/platform/projects/${this.projectId}/database-id`,
+        { query: { environment: this.environment }, auth: 'none' },
+      );
+      const dbId = (response?.data ?? response)?.databaseId || null;
+      if (!dbId) throw new StacknodoError('No database found for this project/environment', { code: 'NO_DATABASE' });
+      this._dbId = dbId;
+      return this._dbId;
+    }
+
     const response = await this.request('GET', `/platform/projects/${this.projectId}/databases`);
     const databases = response?.data || response?.databases || [];
     const db = databases.find(d => d.environment === this.environment) || databases[0];

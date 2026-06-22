@@ -7,7 +7,6 @@ import { withEnv } from '../test-support/helpers.js';
 
 test('constructor validates required config and seeds an explicit database id', () => {
   assert.throws(() => new Stacknodo({ apiKey: 'snk_proj_test' }), /projectId is required/);
-  assert.throws(() => new Stacknodo({ projectId: 'proj_123' }), /apiKey is required/);
 
   const client = new Stacknodo({
     projectId: 'proj_123',
@@ -17,6 +16,14 @@ test('constructor validates required config and seeds an explicit database id', 
 
   assert.equal(client._http._dbId, 'db_123');
   assert.ok(client.from('posts') instanceof QueryBuilder);
+});
+
+test('constructor allows a keyless client for browser end-user auth flows', () => {
+  const client = new Stacknodo({ projectId: 'proj_123' });
+
+  assert.equal(client._http.apiKey, undefined);
+  assert.ok(client.from('posts') instanceof QueryBuilder);
+  assert.ok(client.dataAuth);
 });
 
 test('lazy namespaces are cached and auth is an alias for platformAuth', () => {
